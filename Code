@@ -121,23 +121,25 @@ function onFormSubmit(e) {
   var rangeEdited = e.range
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var saveplates = ss.getSheetByName("SavePlates")
+  var saveplates = ss.getSheetByName("SavePlates");
   var range = saveplates.getRange(2, 1, 40, 9);
   var targetcells = range.getDisplayValues();
   
   var stringsArray = rangeEdited.getDisplayValues();
   var cellArray = stringsArray[0];
-  var name = cellArray[2];
+  var name = standardizeName_(cellArray[2]);
+  //True if they want to remove a save plate, false if they're adding a save plate
+  if (!cellArray[3]) {
+    cellArray[3] = "";
+  }
+  var remove = (cellArray[3].indexOf("Remove") > -1);
   var meals = cellArray[1];
   var meal = meals.split(",");
-  Logger.log(meal);
   
   for (var i = 0; i < meal.length; i++) {
     var str = meal[i];
     var col = 0;
-    //Determines where the name will be placed on the first sheet
-    Logger.log("str: " + str);
-    Logger.log("i: " + i);
+    //Determines where the name will be placed on the saveplate sheet
     //Determines the column
     if (str.indexOf("Monday Lunch") > -1) {
       col = 0;
@@ -158,23 +160,120 @@ function onFormSubmit(e) {
     } else if (str.indexOf("Friday Lunch") > -1) {
       col = 8;
     }
-
-    //Determines the row (finds the next free spot)
-    for (var row = 0; row < 40; row++) {
-      var checkString = targetcells[row][col];
-      if (!checkString) {
-        checkString = "";
+    
+    //If they selected remove, remove their name instead of adding their name.
+    if (remove) {
+      targetcells = remove_(name, col, targetcells);
+    } else {
+      
+      for (var row = 0; row < 40; row++) {
+        var checkString = targetcells[row][col];
+        if (!checkString) {
+          checkString = "";
+        }
+        if (checkString.length == 0) {
+          var targetRow = row;
+          break;
+        }
       }
-      if (checkString.length == 0) {
-        var targetRow = row;
-        break;
+      /*if (containsStarred(name, col, targetcells)) {
+        Logger.log("True");
+      } else {
+        Logger.log("False");
+        targetcells = remove_(name, col, targetcells);
+        targetcells[targetRow][col] = name;
+      }*/
+      if (!containsStarred_(name, col, targetcells)) {
+        targetcells = remove_(name, col, targetcells);
+        targetcells[targetRow][col] = name;
+        targetcells = collapseWhiteSpace_(targetcells);
       }
     }
-    
-    targetcells[targetRow][col] = name;
-    
   }
   
   range.setValues(targetcells);
   
+}
+
+/**
+* Capitalizes the first letter of each word in submission
+* Makes everything else lowercase
+*
+* @param rawName the string input that the user enters on the form
+*/
+function standardizeName_(rawName) {
+  rawName = rawName.toLowerCase();
+  var nameParts = rawName.split(" ");
+  var outString = "";
+  for (var i = 0; i < nameParts.length; i++) {
+    var string = nameParts[i];
+    if (string.length >= 1) {
+      var firstChar = string.slice(0,1);
+      firstChar = firstChar.toUpperCase();
+      var otherChars = string.slice(1);
+      string = firstChar + otherChars;
+    } else {
+      string = string.toUpperCase();
+    }
+    
+    //Just for JT, because he's the only name that looks weird after this
+    string.replace("Jt", "JT");
+    
+    outString = outString + " " + string;
+    outString = outString.trim();
+  }
+  return outString;
+  
+}
+
+/**
+* Removes all names that match the input name from a column in targetcells
+*
+* @param name the name to purge from the column
+* @param col the column of targetcells to search through
+* @param targetcells a 2D string array containing the contents of all the cell that can contain names
+*/
+function remove_(name, col, targetcells) {
+  //standardize the input name
+  name = name.replace("*", "");
+  name = standardizeName_(name);
+  
+  for (var row = 0; row < targetcells.length; row ++) {
+    var cellName = targetcells[row][col];
+    cellName = cellName.replace("*", "");
+    cellName = standardizeName_(cellName);
+    
+    // If the input name matches the name in the cell, delete the name in the cell
+    if (name.indexOf(cellName) > -1) {
+      targetcells[row][col] = "";
+    }
+  }
+  targetcells = collapseWhiteSpace_(targetcells);
+  return targetcells;
+}
+
+/**
+ * Checks if the col contains the name given but with a star
+ *
+ * @param name the name to check with the column
+ * @param col, the column of targetcells to search through
+ * @param targetcells a 2D string array containing the contents of all the cell that can contain names
+ */
+function containsStarred_(name, col, targetcells) {
+  name = name.replace("*", "");
+  name = standardizeName_(name);
+  name = name + "*";
+  
+  for (var row = 0; row < targetcells.length; row++) {
+    var targetName = targetcells[row][col];
+    targetName = standardizeName_(targetName);
+    Logger.log("name: " + name);
+    Logger.log("targetName: " + targetName);
+    if (targetName.indexOf(name) > -1) {
+      Logger.log("True");
+      return row;
+    }
+  }
+  Logger.log("False");
+  return false;
 }
